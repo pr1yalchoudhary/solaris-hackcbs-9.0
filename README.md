@@ -56,8 +56,9 @@ On macOS/Linux use `python3.12` and `.venv/bin/python` instead.
    special characters in its password; save it only as `MONGODB_URI` in `backend/.env`.
 5. Set `MONGODB_DATABASE=solaris`. From `backend`, run
    `.venv/Scripts/python.exe -m app.init_db` using the setup identity. This explicitly
-   creates validators/indexes; startup itself never changes the database schema.
-   Existing invalid records are not repaired by this command. Use an empty dev database first.
+   creates missing collections/validators/indexes; startup never changes database schemas.
+   Reruns verify matching definitions. Conflicting existing definitions are refused and
+   require an explicit migration; no records are inserted, repaired or replaced.
 6. Switch back to the restricted application identity and restart FastAPI. `/api/ready`
    returns 200 after a successful ping; 503 means missing config or unavailable database.
 
