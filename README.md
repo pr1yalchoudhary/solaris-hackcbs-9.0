@@ -1,119 +1,75 @@
-# Solaris · HackCBS 2026
+# Solaris
 
-Shared solar investment planning and management for residential communities using Virtual Net Metering (VNM).
+Solaris is a HackCBS project exploring how housing societies can plan shared rooftop solar under Virtual Net Metering (VNM). The idea is to make the numbers and decisions easier for residents to understand, especially when project costs or membership change.
 
-## Foundation status
+## Where things stand
 
-React + Vite + TypeScript + Tailwind CSS frontend; Python + FastAPI backend;
-MongoDB Atlas via backend-only PyMongo Async; local Google OR-Tools CP-SAT smoke model.
-Gemini is planned for explanations only. No live AI integration, payment processing,
-deployment, real financial data, or automatic ownership/allocation changes are present.
+This repository is an early foundation, not a finished solar-management platform. It currently includes:
 
-See [architecture and MVP order](docs/architecture.md) and [collection catalogue](docs/data-model.md).
-This is an infrastructure foundation, not the completed domain MVP.
+- A small React/Vite page that checks whether the API is reachable.
+- A FastAPI service with health and readiness checks, token-based user lookup, and basic role and community-access checks.
+- MongoDB collection validators and indexes for the initial data model.
+- An OR-Tools CP-SAT smoke example.
+- A few tests covering the API foundation and schema setup.
 
-## Local prerequisites
+Features such as project planning, bill reconciliation, provider workflows, and SmartExit are ideas for future work; they are not implemented end to end yet.
 
-- Node.js 22.12+ and pnpm 10+ (the lockfile was generated with pnpm 11).
-- Python 3.11–3.12; verified with Python 3.12. Python 3.8/3.9 are too old.
-- Atlas and Clerk credentials are optional to start the shell; required for data/auth functionality.
+## Run locally
 
-From the repository root, in PowerShell:
+### Backend
 
-```powershell
-py -3.12 -m venv backend/.venv
-backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-dev.lock.txt
-Copy-Item backend/.env.example backend/.env
-cd backend
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-In a second terminal:
+Use Python 3.11 or newer. From the `Backend` directory:
 
 ```powershell
-cd frontend
-pnpm install --frozen-lockfile
-pnpm dev
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+uvicorn app.main:app --reload --port 8000
 ```
 
-Open http://localhost:5173. API docs: http://127.0.0.1:8000/docs.
-Vite proxies `/api` to FastAPI. Use `localhost:5173` for the frontend so the
-configured token authorised party matches. No frontend database driver or credentials.
-If these ports are occupied, run Uvicorn with `--port 8010` and set
-`$env:DEV_API_TARGET='http://127.0.0.1:8010'` before `pnpm dev` in the frontend terminal.
-Vite prints its selected free port. Update backend CORS and auth authorised parties to
-match the frontend origin before testing authenticated requests on a different port.
-If `py -3.12` is missing, install Python 3.12 or invoke an existing 3.12 executable.
-On macOS/Linux use `python3.12` and `.venv/bin/python` instead.
+The API listens on `http://127.0.0.1:8000`. Check `http://127.0.0.1:8000/api/health` to see whether it is running.
 
-## Atlas setup (manual; no cloud resources provisioned)
-
-1. Create/select an Atlas project and cluster; review its pricing before enabling paid resources.
-2. Under Database Access create a dedicated app database user, limited to `readWrite`
-   on `solaris`. Use a separate setup identity with collection/index-management privileges.
-3. In Network Access allow your current development IP only. Avoid unrestricted IP access.
-4. Use Connect → Drivers → Python to copy the TLS `mongodb+srv://` URI. URL-encode
-   special characters in its password; save it only as `MONGODB_URI` in `backend/.env`.
-5. Set `MONGODB_DATABASE=solaris`. From `backend`, run
-   `.venv/Scripts/python.exe -m app.init_db` using the setup identity. This explicitly
-   creates validators/indexes; startup itself never changes the database schema.
-   Existing invalid records are not repaired by this command. Use an empty dev database first.
-6. Switch back to the restricted application identity and restart FastAPI. `/api/ready`
-   returns 200 after a successful ping; 503 means missing config or unavailable database.
-
-No Atlas connection or schema application has been performed without your credentials.
-
-## Authentication and roles
-
-Recommended: Clerk for identity, FastAPI for authorisation. Configure a Clerk application
-for `http://localhost:5173`. Put its issuer and PEM public key into backend `AUTH_ISSUER`
-and `AUTH_PUBLIC_KEY` (literal `\n` in the PEM is supported). Review provider pricing
-before enabling paid options. The public key needs rotation when Clerk rotates keys.
-
-The backend validates RS256 signature, issuer, expiry, not-before, issued-at and authorised
-party. Roles in a token or request are ignored. An operator must provision an active
-`users` document keyed by Clerk `auth_subject`, and community-specific `memberships`.
-IDs are UUID strings, timestamps BSON UTC dates, `schema_version` is 1; follow
-`backend/app/schema.py`. No self-service role escalation or automatic first-user admin.
-Send a Clerk session token as `Authorization: Bearer <token>` to `/api/me`.
-
-`/api/admin/access` requires `platform_admin`; `/api/communities/{id}/access` requires
-active membership in that community. Future resource endpoints must additionally filter
-by community, ownership and membership role. The login UI and three dashboards are next
-MVP work; they are not implemented in this foundation.
-
-## Documents and secrets
-
-Recommend private S3 object storage, with public access blocked and encryption enabled.
-Backend-authorised short-lived signed URLs will handle uploads/downloads. Store metadata,
-hash, ownership and opaque object key in MongoDB; never public bill URLs or file binaries.
-Enforce PDF/JPEG/PNG, 10 MiB maximum, signature checks and quarantine/scan before access.
-The upload adapter and OCR are deferred; no bucket is created here.
-
-All credentials belong in ignored backend `.env` or backend environment variables.
-`frontend/.env` may contain only public configuration: every `VITE_*` value is browser-visible.
-`.env.example` files contain placeholders only. Gemini has no callable adapter yet;
-the disabled `ENABLE_PAID_API_CALLS` setting is reserved for a future explicit approval gate.
-
-## Verification
+MongoDB and authentication settings are optional for starting the server, but required for readiness and protected routes. Copy `Backend/.env.example` to `Backend/.env` and set the values you need. The database setup script is explicit; it does not run when the API starts:
 
 ```powershell
-cd backend
-.venv/Scripts/python.exe -m pytest
-cd ../frontend
-pnpm build
+python -m app.init_db
 ```
 
-Tests cover no-config startup, readiness, token validation, role enforcement, community
-isolation, and a real local CP-SAT solve. Live Atlas, Clerk sign-in, S3, Gemini and domain
-financial workflows require later integration validation. No commits or pushes are automatic.
-See [verification results](docs/verification.md).
+### Frontend
 
-## Layout
+In a second terminal, from `Frontend`:
 
-```text
-backend/app/          FastAPI, config, auth, Mongo validators and explicit setup
-backend/tests/        Foundation security and solver checks
-frontend/src/         React shell and API health connection
-docs/                Architecture, data relationships and MVP boundaries
+```powershell
+npm install
+npm run dev
 ```
+
+Vite serves the page at `http://127.0.0.1:5173` and proxies `/api` requests to the local backend. To use another backend URL, set `DEV_API_TARGET` in the frontend environment.
+
+## Checks
+
+Run the backend tests from `Backend`:
+
+```powershell
+python -m pytest
+```
+
+Build the frontend from `Frontend`:
+
+```powershell
+npm run build
+```
+
+## API endpoints
+
+- `GET /api/health` — confirms the API process is responding.
+- `GET /api/ready` — checks that MongoDB is configured and reachable.
+- `GET /api/me` — returns the authenticated user's ID and role.
+- `GET /api/admin/access` — example platform-admin role check.
+- `GET /api/communities/{community_id}/access` — checks for an active community membership.
+
+Authentication uses an RS256 token verified with the configured public key and issuer. Roles are read from active user records in MongoDB, not trusted from token claims.
+
+## Project direction
+
+The longer-term goal is to help communities compare contribution plans, keep track of project information, and assess member exits without making automatic financial or ownership decisions. Any recommendations should remain subject to community review and the relevant DISCOM's approval.
