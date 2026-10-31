@@ -8,7 +8,8 @@ def smoke_solve() -> int:
     model.add(allocation <= 7)
     model.maximize(allocation)
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 1
+    solver.parameters.max_time_in_seconds = 5
+    solver.parameters.num_search_workers = 1
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError("No feasible solution")
